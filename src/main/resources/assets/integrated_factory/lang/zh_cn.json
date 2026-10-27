@@ -1,0 +1,9 @@
+{
+  "block.integrated_factory.integration_unit": "集成单元",
+  "block.integrated_factory.extension_interface": "集成拓展接口",
+  "block.integrated_factory.input_port": "工厂输入端口",
+  "block.integrated_factory.output_port": "工厂输出端口",
+  "block.integrated_factory.simple_integration_unit": "简单集成单元",
+  "block.integrated_factory.stress_port": "应力端口",
+  "itemGroup.integrated_factory": "工厂线路集成系统"
+}

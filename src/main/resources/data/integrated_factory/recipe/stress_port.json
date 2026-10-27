@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "DOD",
+    "OSH",
+    "DOD"
+  ],
+  "key": {
+    "D": { "item": "minecraft:diamond" },
+    "O": { "item": "minecraft:obsidian" },
+    "S": { "item": "create:stressometer" },
+    "H": { "item": "create:shaft" }
+  },
+  "result": {
+    "id": "integrated_factory:stress_port",
+    "count": 1
+  }
+}

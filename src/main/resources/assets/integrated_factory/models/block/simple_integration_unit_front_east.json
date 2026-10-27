@@ -1,0 +1,211 @@
+{
+  "credit": "Create clutch gearshift geometry adapted for the simple integration unit",
+  "parent": "block/block",
+  "textures": {
+    "0": "integrated_factory:block/simple_integration_unit_clutch_front",
+    "1": "integrated_factory:block/simple_integration_unit_gearbox",
+    "2": "integrated_factory:block/simple_integration_unit_clutch",
+    "3": "integrated_factory:block/simple_integration_unit_clutch_back",
+    "particle": "integrated_factory:block/simple_integration_unit_clutch"
+  },
+  "elements": [
+    {
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 270,
+          "texture": "#2"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 270,
+          "texture": "#0"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 270,
+          "texture": "#2"
+        },
+        "west": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 270,
+          "texture": "#3"
+        },
+        "up": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "rotation": 180,
+          "texture": "#1"
+        },
+        "down": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#1"
+        }
+      }
+    },
+    {
+      "from": [
+        1.95,
+        16,
+        1.95
+      ],
+      "to": [
+        14.05,
+        15,
+        14.05
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            2,
+            15,
+            14,
+            16
+          ],
+          "texture": "#1"
+        },
+        "east": {
+          "uv": [
+            0,
+            2,
+            1,
+            14
+          ],
+          "rotation": 270,
+          "texture": "#1"
+        },
+        "south": {
+          "uv": [
+            2,
+            0,
+            14,
+            1
+          ],
+          "rotation": 180,
+          "texture": "#1"
+        },
+        "west": {
+          "uv": [
+            15,
+            2,
+            16,
+            14
+          ],
+          "rotation": 90,
+          "texture": "#1"
+        },
+        "up": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "rotation": 180,
+          "texture": "#1"
+        }
+      }
+    },
+    {
+      "from": [
+        1.95,
+        1,
+        1.95
+      ],
+      "to": [
+        14.05,
+        0,
+        14.05
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            2,
+            15,
+            14,
+            16
+          ],
+          "rotation": 180,
+          "texture": "#1"
+        },
+        "east": {
+          "uv": [
+            15,
+            2,
+            16,
+            14
+          ],
+          "rotation": 270,
+          "texture": "#1"
+        },
+        "south": {
+          "uv": [
+            2,
+            0,
+            14,
+            1
+          ],
+          "texture": "#1"
+        },
+        "west": {
+          "uv": [
+            0,
+            2,
+            1,
+            14
+          ],
+          "rotation": 90,
+          "texture": "#1"
+        },
+        "down": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "texture": "#1"
+        }
+      }
+    }
+  ]
+}

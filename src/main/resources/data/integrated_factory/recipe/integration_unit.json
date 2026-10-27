@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "DOD",
+    "ISI",
+    "DOD"
+  ],
+  "key": {
+    "D": { "item": "minecraft:diamond" },
+    "O": { "item": "minecraft:obsidian" },
+    "I": { "item": "minecraft:iron_block" },
+    "S": { "item": "create:shaft" }
+  },
+  "result": {
+    "id": "integrated_factory:integration_unit",
+    "count": 1
+  }
+}

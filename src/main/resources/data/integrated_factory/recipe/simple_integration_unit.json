@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    { "item": "integrated_factory:input_port" },
+    { "item": "integrated_factory:integration_unit" },
+    { "item": "integrated_factory:output_port" }
+  ],
+  "result": {
+    "id": "integrated_factory:simple_integration_unit",
+    "count": 1
+  }
+}

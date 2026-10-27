@@ -1,0 +1,44 @@
+{
+  "multipart": [
+    {
+      "when": {
+        "facing": "north"
+      },
+      "apply": {
+        "model": "integrated_factory:block/integration_unit/block",
+        "x": 90,
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "facing": "south"
+      },
+      "apply": {
+        "model": "integrated_factory:block/integration_unit/block",
+        "x": 90,
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "facing": "east"
+      },
+      "apply": {
+        "model": "integrated_factory:block/integration_unit/block",
+        "x": 90,
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "facing": "west"
+      },
+      "apply": {
+        "model": "integrated_factory:block/integration_unit/block",
+        "x": 90,
+        "y": 180
+      }
+    }
+  ]
+}

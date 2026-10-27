@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="integrated_factory"
+version="${file.jarVersion}"
+displayName="Integrated Factory - 工厂线路集成系统"
+logoFile="icon.png"
+logoBlur=false
+authors="Integrated Factory Team"
+credits="Built for Create 6.0.10 on Minecraft 1.21.1"
+description='''A Create addon that virtualizes factory machinery into isolated machine rooms while preserving real Create recipes, logistics, kinetic power, and stress accounting.
+
+机械动力附属模组：将工厂封装为机器节点，提供跨空间共享输入/输出库存、真实 Create 动力网络应力桥接、集成结构和简单集成单元。
+
+Create addon for isolated factory rooms, shared logistics, and stress bridging.'''
+[[dependencies.integrated_factory]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.0,)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.integrated_factory]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.21.2)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.integrated_factory]]
+modId="create"
+type="required"
+versionRange="[6.0.10,6.1.0)"
+ordering="AFTER"
+side="BOTH"

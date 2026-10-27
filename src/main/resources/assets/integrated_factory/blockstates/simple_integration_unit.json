@@ -1,0 +1,24 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "integrated_factory:block/simple_integration_unit_front_west",
+      "x": 90,
+      "y": 90
+    },
+    "facing=south": {
+      "model": "integrated_factory:block/simple_integration_unit_front_east",
+      "x": 90,
+      "y": 270
+    },
+    "facing=east": {
+      "model": "integrated_factory:block/simple_integration_unit_front_west",
+      "x": 90,
+      "y": 180
+    },
+    "facing=west": {
+      "model": "integrated_factory:block/simple_integration_unit_front_east",
+      "x": 90,
+      "y": 0
+    }
+  }
+}

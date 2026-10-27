@@ -1,0 +1,80 @@
+{
+  "credit": "Integrated Factory kinetic shaft partial; 0.5 pixel protrudes beyond each core side",
+  "parent": "block/block",
+  "textures": {
+    "side": "create:block/axis",
+    "top": "create:block/axis_top",
+    "particle": "create:block/axis"
+  },
+  "elements": [
+    {
+      "name": "Extended rotating shaft",
+      "from": [
+        6,
+        -0.5,
+        6
+      ],
+      "to": [
+        10,
+        16.5,
+        10
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            6,
+            0,
+            10,
+            16
+          ],
+          "texture": "#side"
+        },
+        "east": {
+          "uv": [
+            6,
+            0,
+            10,
+            16
+          ],
+          "texture": "#side"
+        },
+        "south": {
+          "uv": [
+            6,
+            0,
+            10,
+            16
+          ],
+          "texture": "#side"
+        },
+        "west": {
+          "uv": [
+            6,
+            0,
+            10,
+            16
+          ],
+          "texture": "#side"
+        },
+        "up": {
+          "uv": [
+            6,
+            6,
+            10,
+            10
+          ],
+          "texture": "#top"
+        },
+        "down": {
+          "uv": [
+            6,
+            6,
+            10,
+            10
+          ],
+          "texture": "#top"
+        }
+      }
+    }
+  ]
+}

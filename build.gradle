@@ -1,0 +1,70 @@
+plugins {
+    id 'net.neoforged.moddev' version '2.0.107'
+}
+
+// NeoForge's mirror is useful on networks where the primary Maven host is unreachable.
+if (project.hasProperty('use_neoforged_mirror')) {
+    repositories.configureEach { repository ->
+        if (repository instanceof org.gradle.api.artifacts.repositories.MavenArtifactRepository &&
+                repository.url.host == 'maven.neoforged.net') {
+            repository.url = uri(repository.url.toString().replace('maven.neoforged.net', 'neoforged.forgecdn.net'))
+        }
+    }
+}
+
+version = project.mod_version
+group = project.mod_group_id
+
+base { archivesName = project.mod_id }
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    maven { url = 'https://neoforged.forgecdn.net/releases' }
+    maven { url = 'https://maven.createmod.net' }
+    maven { url = 'https://maven.ithundxr.dev/snapshots' }
+}
+
+neoForge {
+    version = project.neo_version
+    runs {
+        configureEach { systemProperty 'forge.logging.console.level', 'info' }
+        client { client() }
+        server { server(); programArgument '--nogui' }
+    }
+    mods { integrated_factory { sourceSet sourceSets.main } }
+}
+
+dependencies {
+    def localCreateJar = file('.gradle-home/create-1.21.1-6.0.10.jar')
+    if (localCreateJar.exists()) {
+        implementation files(localCreateJar)
+    } else {
+        implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
+    }
+    implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
+    runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
+    implementation("com.tterrag.registrate:Registrate:${registrate_version}")
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+tasks.named('jar') {
+    manifest { attributes('Implementation-Version': project.version.toString()) }
+}
+
+def buildNotesTask = tasks.register('printBuildNotes') {
+    group = 'help'
+    description = 'Shows the project build notes and common NeoForge/Create pitfalls.'
+    doLast {
+        logger.lifecycle('')
+        logger.lifecycle('Integrated Factory: before diagnosing build or startup issues, read BUILDING.md.')
+        logger.lifecycle('Target: Minecraft 1.21.1 / NeoForge 21.1.x / Create 6.0.10 / Java 21.')
+        logger.lifecycle('')
+    }
+}
+
+tasks.matching { it.name in ['compileJava', 'jar', 'assemble', 'build'] }.configureEach {
+    dependsOn(buildNotesTask)
+}

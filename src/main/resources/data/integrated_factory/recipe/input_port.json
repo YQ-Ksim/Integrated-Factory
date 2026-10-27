@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    { "item": "minecraft:copper_ingot" },
+    { "item": "minecraft:obsidian" },
+    { "item": "minecraft:iron_block" }
+  ],
+  "result": {
+    "id": "integrated_factory:input_port",
+    "count": 2
+  }
+}

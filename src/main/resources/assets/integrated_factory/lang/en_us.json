@@ -1,0 +1,9 @@
+{
+  "block.integrated_factory.integration_unit": "Integration Unit",
+  "block.integrated_factory.extension_interface": "Extension Interface",
+  "block.integrated_factory.input_port": "Factory Input Port",
+  "block.integrated_factory.output_port": "Factory Output Port",
+  "block.integrated_factory.simple_integration_unit": "Simple Integration Unit",
+  "block.integrated_factory.stress_port": "Stress Port",
+  "itemGroup.integrated_factory": "Integrated Factory"
+}
