@@ -5,6 +5,7 @@ import dev.integratedfactory.block.IFEntityBlock;
 import dev.integratedfactory.block.IFSimpleUnitBlock;
 import dev.integratedfactory.block.IFKineticCoreBlock;
 import dev.integratedfactory.block.IFStressPortBlock;
+import dev.integratedfactory.block.IFCornerstoneBlock;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -13,6 +14,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -32,6 +34,14 @@ public final class IFBlocks {
     public static final DeferredBlock<Block> OUTPUT_PORT = block("output_port", () -> new IFEntityBlock(props().strength(2.0f)));
     public static final DeferredBlock<Block> SIMPLE_INTEGRATION_UNIT = block("simple_integration_unit", () -> new IFSimpleUnitBlock(props()));
     public static final DeferredBlock<Block> STRESS_PORT = block("stress_port", () -> new IFStressPortBlock(props().strength(2.0f).noOcclusion().dynamicShape()));
+    /**
+     * An unbreakable machine-room foundation.  The block deliberately copies
+     * vanilla bedrock's complete property set (hardness, blast resistance,
+     * sound, tool requirements and loot behaviour); only its model texture is
+     * different and is supplied by assets/integrated_factory/models/block.
+     */
+    public static final DeferredBlock<Block> CORNERSTONE = block("cornerstone",
+            () -> new IFCornerstoneBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.BEDROCK)));
     public static final net.neoforged.neoforge.registries.DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = TABS.register("main", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.integrated_factory"))
             .icon(() -> new ItemStack(INTEGRATION_UNIT.get()))
@@ -39,6 +49,7 @@ public final class IFBlocks {
                 output.accept(INTEGRATION_UNIT.get()); output.accept(SIMPLE_INTEGRATION_UNIT.get());
                 output.accept(EXTENSION_INTERFACE.get()); output.accept(INPUT_PORT.get());
                 output.accept(OUTPUT_PORT.get()); output.accept(STRESS_PORT.get());
+                output.accept(CORNERSTONE.get());
             }).build());
 
     private static BlockBehaviour.Properties props() {

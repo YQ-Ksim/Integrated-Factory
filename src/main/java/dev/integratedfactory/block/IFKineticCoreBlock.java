@@ -5,6 +5,7 @@ import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dev.integratedfactory.blockentity.IFStructureBlockEntity;
 import dev.integratedfactory.registry.IFBlockEntities;
+import dev.integratedfactory.space.IFMachineSpace;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -22,6 +23,7 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.server.level.ServerPlayer;
@@ -37,7 +39,28 @@ public final class IFKineticCoreBlock extends KineticBlock implements EntityBloc
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     public IFKineticCoreBlock(Properties properties) { super(properties); registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH)); }
     @Override protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) { builder.add(FACING); }
-    @Override public BlockState getStateForPlacement(BlockPlaceContext context) { return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite()); }
+    @Override public BlockState getStateForPlacement(BlockPlaceContext context) {
+        if (IFMachineSpace.isFactoryDimension(context.getLevel())) return null;
+        // getClickedPos is the block that was clicked, not always the final
+        // placement position. Keep this check in sync with the pre-placement
+        // event so orphan ports/extensions do not cause false rejections.
+        BlockPos target = context.getClickedPos();
+        if (!context.getLevel().getBlockState(target).canBeReplaced())
+            target = target.relative(context.getClickedFace());
+        if (IFStructureBlockEntity.hasAdjacentStructure(context.getLevel(), target)) return null;
+        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+    }
+    @Override public boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
+        return super.canSurvive(state, level, pos);
+    }
+    @Override public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (!level.isClientSide && placer instanceof ServerPlayer player
+                && level.getBlockEntity(pos) instanceof IFStructureBlockEntity core) {
+            core.setInitialOwner(player.getUUID());
+            core.markPlayerPlacement();
+        }
+    }
     @Override public boolean hasShaftTowards(LevelReader level, BlockPos pos, BlockState state, Direction face) {
         return face.getAxis() == getRotationAxis(state);
     }
@@ -60,7 +83,10 @@ public final class IFKineticCoreBlock extends KineticBlock implements EntityBloc
         if (!player.getMainHandItem().isEmpty()) return InteractionResult.PASS;
         if (level.isClientSide) return InteractionResult.SUCCESS;
         if (player instanceof ServerPlayer serverPlayer && level.getBlockEntity(pos) instanceof IFStructureBlockEntity core) {
-            if (serverPlayer.isShiftKeyDown() && core.node() != null) IFNodeMenu.showStructureStats(serverPlayer, core.node());
+            if (serverPlayer.isShiftKeyDown() && core.node() != null) {
+                IFNodeMenu.showStructureStats(serverPlayer, core.node());
+                dev.integratedfactory.event.IFEvents.showNodeWorldRow(serverPlayer, core.node());
+            }
             else core.enterRoom(serverPlayer);
         }
         return InteractionResult.CONSUME;

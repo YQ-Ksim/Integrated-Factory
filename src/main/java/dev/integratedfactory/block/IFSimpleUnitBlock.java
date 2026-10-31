@@ -25,6 +25,7 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
@@ -36,7 +37,27 @@ public class IFSimpleUnitBlock extends KineticBlock implements EntityBlock, IWre
     public IFSimpleUnitBlock(Properties properties) { super(properties); registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH)); }
     @Override protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) { builder.add(FACING); }
     @Override public BlockState getStateForPlacement(BlockPlaceContext context) { return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite()); }
-    /** The front (toward the placer) is the input; the left/right sides form the shaft axis. */
+    @Override public boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
+        // Simple units are independent nodes: they never join or conflict
+        // with a multi-block integration structure.  They are still barred
+        // from being created inside a machine room.
+        if (level instanceof Level actual && dev.integratedfactory.space.IFMachineSpace.isFactoryDimension(actual)) return false;
+        return super.canSurvive(state, level, pos);
+    }
+    @Override public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (!level.isClientSide && placer instanceof ServerPlayer player
+                && level.getBlockEntity(pos) instanceof IFSimpleUnitBlockEntity unit) {
+            unit.setInitialOwner(player.getUUID());
+            unit.markPlayerPlacement();
+        }
+    }
+/**
+ * The front (toward the placer) is the input; the left/right sides form the
+ * shaft axis.  FACING is intentionally horizontal-only: the unit can be
+ * rotated through all four yaw directions around the vertical axis, but it
+ * can never be tipped onto an X/Z-facing axis.
+ */
     @Override public boolean hasShaftTowards(LevelReader level, BlockPos pos, BlockState state, Direction face) {
         return face.getAxis() == getRotationAxis(state);
     }
@@ -59,7 +80,10 @@ public class IFSimpleUnitBlock extends KineticBlock implements EntityBlock, IWre
         if (!player.getMainHandItem().isEmpty()) return InteractionResult.PASS;
         if (level.isClientSide) return InteractionResult.SUCCESS;
         if (player instanceof ServerPlayer serverPlayer && level.getBlockEntity(pos) instanceof IFSimpleUnitBlockEntity unit) {
-            if (serverPlayer.isShiftKeyDown() && unit.node() != null) IFNodeMenu.openSimple(serverPlayer, unit.node());
+            if (serverPlayer.isShiftKeyDown() && unit.node() != null) {
+                IFNodeMenu.openSimple(serverPlayer, unit.node());
+                dev.integratedfactory.event.IFEvents.showNodeWorldRow(serverPlayer, unit.node());
+            }
             else unit.enterRoom(serverPlayer);
         }
         return InteractionResult.CONSUME;

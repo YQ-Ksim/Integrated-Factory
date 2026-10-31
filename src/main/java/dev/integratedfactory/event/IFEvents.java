@@ -3,12 +3,15 @@ package dev.integratedfactory.event;
 import dev.integratedfactory.data.IFMachineData;
 import dev.integratedfactory.space.IFMachineSpace;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.core.BlockPos;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.level.PistonEvent;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.ItemStack;
@@ -20,6 +23,15 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.arguments.EntityArgument;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import dev.integratedfactory.menu.IFNodeMenu;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import com.simibubi.create.content.schematics.cannon.LaunchedItem;
+import com.simibubi.create.content.schematics.cannon.SchematicannonBlockEntity;
+
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 
 @EventBusSubscriber(modid = "integrated_factory")
 public final class IFEvents {
@@ -60,16 +72,7 @@ public final class IFEvents {
             }
             for (int i = 0; i < owned.size(); i++) {
                 IFMachineData.Node node = owned.get(i);
-                String note = node.note.isBlank() ? "（无备注）" : node.note;
-                String id = node.id.toString();
-                Component row = Component.literal((i + 1) + ". " + node.id.toString().substring(0, 8)
-                                + " | " + node.status + " | " + note + " ")
-                        .append(action("[进入]", "/factory enter " + id, ClickEvent.Action.RUN_COMMAND, ChatFormatting.GREEN))
-                        .append(Component.literal(" "))
-                        .append(action("[删除]", "/factory delete " + id, ClickEvent.Action.RUN_COMMAND, ChatFormatting.RED))
-                        .append(Component.literal(" "))
-                        .append(action("[备注]", "/factory note " + id + " ", ClickEvent.Action.SUGGEST_COMMAND, ChatFormatting.YELLOW));
-                player.displayClientMessage(row, false);
+                player.displayClientMessage(worldRow(node, (i + 1) + ". "), false);
             }
             return owned.size();
         }));
@@ -131,6 +134,30 @@ public final class IFEvents {
         if (!(event.getPlayer() instanceof ServerPlayer player) || !IFMachineSpace.isFactoryDimension(player.level())) return;
         if (!isCurrentNodeRoom(player, event.getPos())) event.setCanceled(true);
     }
+    @SubscribeEvent public static void protectCorePlacementAttempt(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide || IFMachineSpace.isFactoryDimension(event.getLevel())) return;
+        ItemStack stack = event.getItemStack();
+        boolean integrationCore = stack.is(dev.integratedfactory.registry.IFBlocks.INTEGRATION_UNIT.get().asItem());
+        boolean extension = stack.is(dev.integratedfactory.registry.IFBlocks.EXTENSION_INTERFACE.get().asItem());
+        boolean inputPort = stack.is(dev.integratedfactory.registry.IFBlocks.INPUT_PORT.get().asItem());
+        boolean outputPort = stack.is(dev.integratedfactory.registry.IFBlocks.OUTPUT_PORT.get().asItem());
+        boolean connector = extension || inputPort || outputPort;
+        if (!integrationCore && !connector) return;
+        BlockPos clicked = event.getPos();
+        BlockPos target = event.getLevel().getBlockState(clicked).canBeReplaced()
+                ? clicked : clicked.relative(event.getFace());
+        if (integrationCore && dev.integratedfactory.blockentity.IFStructureBlockEntity.hasAdjacentStructure(event.getLevel(), target)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            event.getEntity().displayClientMessage(Component.literal("集成核心不能放置在已有核心或已成型机器结构旁边。"), true);
+            return;
+        }
+        if (connector && dev.integratedfactory.blockentity.IFStructureBlockEntity.wouldConnectMultipleStructures(event.getLevel(), target)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.FAIL);
+            event.getEntity().displayClientMessage(Component.literal("端口或拓展接口不能连接两个已有的机器结构。"), true);
+        }
+    }
     @SubscribeEvent public static void bindCoreFromMachineRoom(PlayerInteractEvent.RightClickBlock event) {
         if (!event.getEntity().isShiftKeyDown() || !IFMachineSpace.isFactoryDimension(event.getLevel())) return;
         var stack = event.getItemStack();
@@ -178,12 +205,13 @@ public final class IFEvents {
         if (IFMachineSpace.isFactoryDimension(player.level())) IFMachineSpace.constrainPlayer(player);
     }
     private static void repairOldCoreItems(ServerPlayer player) {
-        boolean repaired = repairCoreItems(player.getInventory().items)
-                | repairCoreItems(player.getInventory().armor)
-                | repairCoreItems(player.getInventory().offhand);
+        IFMachineData data = IFMachineData.get(player.getServer());
+        boolean repaired = repairCoreItems(player.getInventory().items, data)
+                | repairCoreItems(player.getInventory().armor, data)
+                | repairCoreItems(player.getInventory().offhand, data);
         if (repaired) player.getInventory().setChanged();
     }
-    private static boolean repairCoreItems(Iterable<ItemStack> stacks) {
+    private static boolean repairCoreItems(Iterable<ItemStack> stacks, IFMachineData data) {
         boolean repaired = false;
         for (ItemStack stack : stacks) {
             boolean integrationCore = stack.is(dev.integratedfactory.registry.IFBlocks.INTEGRATION_UNIT.get().asItem());
@@ -193,6 +221,14 @@ public final class IFEvents {
             if (blockData == null) continue;
             net.minecraft.nbt.CompoundTag tag = blockData.copyTag();
             if (!tag.hasUUID("node_id")) continue;
+            if (data.wasDeleted(tag.getUUID("node_id"))) {
+                // A bound item whose node was deleted is safe to reuse as a
+                // fresh core. Remove stale binding/glint before placement.
+                stack.remove(DataComponents.BLOCK_ENTITY_DATA);
+                stack.remove(DataComponents.ENCHANTMENT_GLINT_OVERRIDE);
+                repaired = true;
+                continue;
+            }
             if (!tag.contains("id")) {
                 tag.putString("id", integrationCore ? "integrated_factory:structure" : "integrated_factory:simple_unit");
                 stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(tag));
@@ -206,20 +242,147 @@ public final class IFEvents {
         return repaired;
     }
     @SubscribeEvent public static void protectPlacement(BlockEvent.EntityPlaceEvent event) {
+        boolean integrationCore = event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.INTEGRATION_UNIT.get());
+        boolean simpleCore = event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.SIMPLE_INTEGRATION_UNIT.get());
+        boolean extension = event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.EXTENSION_INTERFACE.get());
+        boolean inputPort = event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.INPUT_PORT.get());
+        boolean outputPort = event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.OUTPUT_PORT.get());
+        if ((extension || inputPort || outputPort) && event.getEntity() instanceof ServerPlayer player
+                && dev.integratedfactory.blockentity.IFStructureBlockEntity.wouldConnectMultipleStructures(event.getLevel(), event.getPos())) {
+            event.setCanceled(true);
+            player.displayClientMessage(Component.literal("端口或拓展接口不能连接两个已有的机器结构。"), true);
+            return;
+        }
+        if (integrationCore || simpleCore) {
+            // Create's Schematicannon and other non-player placement paths do
+            // not have a ServerPlayer source. Reject them explicitly instead
+            // of allowing a copied block-entity NBT to rebind a node.
+            if (!(event.getEntity() instanceof ServerPlayer player)) {
+                event.setCanceled(true);
+                return;
+            }
+            // Core conflict checks run before placement in
+            // protectCorePlacementAttempt and IFKineticCoreBlock. Cancelling
+            // EntityPlaceEvent here is too late: vanilla has already changed
+            // the world and decremented the stack, which can make the item
+            // appear swallowed until a relog.
+        }
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!IFMachineSpace.isFactoryDimension(player.level())) {
             if (event.getLevel().getBlockEntity(event.getPos()) instanceof dev.integratedfactory.blockentity.IFStructureBlockEntity core
-                    && event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.INTEGRATION_UNIT.get())) core.setInitialOwner(player.getUUID());
+                    && integrationCore) { core.setInitialOwner(player.getUUID()); core.markPlayerPlacement(); }
             if (event.getLevel().getBlockEntity(event.getPos()) instanceof dev.integratedfactory.blockentity.IFSimpleUnitBlockEntity simple
-                    && event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.SIMPLE_INTEGRATION_UNIT.get())) simple.setInitialOwner(player.getUUID());
+                    && simpleCore) { simple.setInitialOwner(player.getUUID()); simple.markPlayerPlacement(); }
             return;
         }
-        if (event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.INTEGRATION_UNIT.get()) || event.getPlacedBlock().is(dev.integratedfactory.registry.IFBlocks.SIMPLE_INTEGRATION_UNIT.get())) {
+        if (integrationCore || simpleCore) {
             event.setCanceled(true);
             player.displayClientMessage(Component.literal("机器空间内不能创建新的集成节点。"), true);
             return;
         }
         if (!isCurrentNodeRoom(player, event.getPos())) event.setCanceled(true);
+    }
+
+    /**
+     * A schematicannon and other Create printers can place blocks without a
+     * player-backed placement event.  Keep the normal event protection as a
+     * second layer for fake/non-player placement paths that do emit an event:
+     * only the registered 10x10x10 build volume is writable in the factory
+     * dimension.  Room floors, barriers and room creation use direct server
+     * placement and are therefore unaffected by this event.
+     */
+    @SubscribeEvent public static void protectFactoryRoomPlacement(BlockEvent.EntityPlaceEvent event) {
+        if (!(event.getLevel() instanceof net.minecraft.world.level.Level level)
+                || !IFMachineSpace.isFactoryDimension(level)) return;
+        if (!IFMachineSpace.isInsideAnyRoom(level, event.getPos())) {
+            event.setCanceled(true);
+            if (event.getEntity() instanceof ServerPlayer player)
+                player.displayClientMessage(Component.literal("机器空间外禁止放置方块。"), true);
+        }
+    }
+
+    /**
+     * Create's schematic cannon ultimately calls Level#setBlock from a
+     * LaunchedItem, bypassing EntityPlaceEvent.  Validate the already flying
+     * items immediately before Create updates them; checking the printer's
+     * cursor itself would reject harmless air/floor/deferred scan targets and
+     * prevent otherwise valid blueprints from printing.  This leaves a cannon
+     * fully usable inside a room, but it cannot modify the barrier or any
+     * position outside the room's 10x10x10 build volume.
+     */
+    @SubscribeEvent public static void guardFactorySchematicCannons(ServerTickEvent.Pre event) {
+        ServerLevel room = event.getServer().getLevel(IFMachineSpace.DIMENSION);
+        if (room == null) return;
+
+        var data = IFMachineData.get(event.getServer());
+        Set<Long> scannedChunks = new HashSet<>();
+        for (IFMachineData.Node node : data.nodes().values()) {
+            if (!node.roomReady) continue;
+            // Current rooms fit one chunk, but inspect the full historical
+            // room footprint as well so pre-alignment rooms cannot bypass the
+            // same guard after an upgrade.
+            int minChunkX = Math.floorDiv(node.roomX - 1, 16);
+            int maxChunkX = Math.floorDiv(node.roomX + 10, 16);
+            int minChunkZ = Math.floorDiv(node.roomZ - 1, 16);
+            int maxChunkZ = Math.floorDiv(node.roomZ + 10, 16);
+            for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+                for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                    net.minecraft.world.level.ChunkPos chunkPos = new net.minecraft.world.level.ChunkPos(chunkX, chunkZ);
+                    if (!scannedChunks.add(chunkPos.toLong())) continue;
+                    LevelChunk chunk = room.getChunkSource().getChunkNow(chunkX, chunkZ);
+                    if (chunk == null) continue;
+                    for (BlockEntity blockEntity : new java.util.ArrayList<>(chunk.getBlockEntities().values())) {
+                        if (blockEntity instanceof SchematicannonBlockEntity cannon)
+                            guardSchematicannon(room, cannon);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void guardSchematicannon(ServerLevel room, SchematicannonBlockEntity cannon) {
+        IFMachineData.Node roomNode = IFMachineSpace.nodeAtRoom(room, cannon.getBlockPos());
+        // The cannon itself may sit on the room's top layer or on an edge
+        // support block. If it is not inside a registered room, derive the
+        // room from a currently flying target instead; only the destination
+        // is security-critical for this guard.
+        if (roomNode == null) {
+            for (LaunchedItem launched : cannon.flyingBlocks) {
+                if (launched.target == null) continue;
+                IFMachineData.Node candidate = IFMachineSpace.nodeAtRoom(room, launched.target);
+                if (candidate != null) { roomNode = candidate; break; }
+            }
+        }
+        boolean blocked = false;
+
+        // A target may have been launched on the previous tick.  Remove it
+        // before LaunchedItem.update() can invoke BlockHelper.placeSchematicBlock.
+        // Return the consumed stack at the cannon so rejecting an out-of-bounds
+        // shot does not silently delete the material.
+        Iterator<LaunchedItem> iterator = cannon.flyingBlocks.iterator();
+        while (iterator.hasNext()) {
+            LaunchedItem launched = iterator.next();
+            if (roomNode != null && launched.target != null
+                    && IFMachineSpace.isInsideRoom(launched.target, roomNode)) continue;
+            iterator.remove();
+            if (launched.stack != null && !launched.stack.isEmpty())
+                net.minecraft.world.level.block.Block.popResource(room, cannon.getBlockPos(), launched.stack.copy());
+            blocked = true;
+        }
+
+        if (blocked) cannon.setChanged();
+    }
+
+    @SubscribeEvent public static void protectVanillaPiston(PistonEvent.Pre event) {
+        var resolver = event.getStructureHelper();
+        if (resolver == null || !resolver.resolve()) return;
+        for (var pos : resolver.getToPush()) {
+            if (event.getLevel().getBlockState(pos).is(dev.integratedfactory.registry.IFBlocks.INTEGRATION_UNIT.get())
+                    || event.getLevel().getBlockState(pos).is(dev.integratedfactory.registry.IFBlocks.SIMPLE_INTEGRATION_UNIT.get())) {
+                event.setCanceled(true);
+                return;
+            }
+        }
     }
     private static boolean isCurrentNodeRoom(ServerPlayer player, net.minecraft.core.BlockPos pos) {
         IFMachineData.Node node = currentNode(player);
@@ -241,6 +404,34 @@ public final class IFEvents {
     private static Component action(String label, String command, ClickEvent.Action action, ChatFormatting color) {
         return Component.literal(label).withStyle(style -> style.withColor(color).withUnderlined(true)
                 .withClickEvent(new ClickEvent(action, command)));
+    }
+    /** Displays the same clickable node row used by /factory worlds. */
+    public static void showNodeWorldRow(ServerPlayer player, IFMachineData.Node node) {
+        if (node == null) return;
+        if (!IFNodeMenu.canAccess(node, player)) {
+            player.displayClientMessage(Component.literal("你没有此工厂节点的访问权限。"), true);
+            return;
+        }
+        String prefix = "机器世界：";
+        if (player.getUUID().equals(node.owner)) {
+            var owned = IFMachineData.get(player.getServer()).nodes().values().stream()
+                    .filter(candidate -> player.getUUID().equals(candidate.owner))
+                    .sorted(java.util.Comparator.comparing(candidate -> candidate.id.toString())).toList();
+            int index = owned.indexOf(node);
+            if (index >= 0) prefix = (index + 1) + ". ";
+        }
+        player.displayClientMessage(worldRow(node, prefix), false);
+    }
+    private static Component worldRow(IFMachineData.Node node, String prefix) {
+        String note = node.note.isBlank() ? "（无备注）" : node.note;
+        String id = node.id.toString();
+        return Component.literal(prefix + node.id.toString().substring(0, 8)
+                        + " | " + node.status + " | " + note + " ")
+                .append(action("[进入]", "/factory enter " + id, ClickEvent.Action.RUN_COMMAND, ChatFormatting.GREEN))
+                .append(Component.literal(" "))
+                .append(action("[删除]", "/factory delete " + id, ClickEvent.Action.RUN_COMMAND, ChatFormatting.RED))
+                .append(Component.literal(" "))
+                .append(action("[备注]", "/factory note " + id + " ", ClickEvent.Action.SUGGEST_COMMAND, ChatFormatting.YELLOW));
     }
     private static int requestDelete(ServerPlayer player, String idText) {
         IFMachineData.Node node = findNode(player, idText);

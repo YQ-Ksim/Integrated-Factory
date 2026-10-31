@@ -8,6 +8,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 
@@ -16,6 +17,27 @@ import java.util.UUID;
 
 /** Copies a core's node identity onto its dropped block item for safe relocation and restoration. */
 public final class IFBoundBlockDrops {
+    /** Creates exactly one core item, retaining its node identity when present. */
+    public static ItemStack createCoreDrop(BlockState state, BlockEntity blockEntity) {
+        ItemStack stack = new ItemStack(state.getBlock());
+        UUID nodeId = null;
+        if (blockEntity instanceof IFStructureBlockEntity core) nodeId = core.nodeId();
+        else if (blockEntity instanceof IFSimpleUnitBlockEntity simple) nodeId = simple.nodeId();
+        if (nodeId == null || blockEntity.getLevel() == null || blockEntity.getLevel().isClientSide
+                || dev.integratedfactory.data.IFMachineData.get(blockEntity.getLevel().getServer()).wasDeleted(nodeId))
+            return stack;
+        CompoundTag data = new CompoundTag();
+        data.putString("id", blockEntity instanceof IFSimpleUnitBlockEntity
+                ? "integrated_factory:simple_unit" : "integrated_factory:structure");
+        data.putUUID("node_id", nodeId);
+        data.putBoolean("integrated_factory_bound", true);
+        if (blockEntity instanceof IFStructureBlockEntity core) core.saveRebindToken(data);
+        else if (blockEntity instanceof IFSimpleUnitBlockEntity simple) simple.saveRebindToken(data);
+        stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(data));
+        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
+        return stack;
+    }
+
     public static List<ItemStack> preserveNodeId(List<ItemStack> drops, LootParams.Builder params, Item blockItem) {
         BlockEntity blockEntity = params.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
         UUID nodeId = null;

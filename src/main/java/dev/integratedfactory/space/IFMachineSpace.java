@@ -13,6 +13,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.ItemStack;
+import dev.integratedfactory.registry.IFBlocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -132,9 +137,48 @@ public final class IFMachineSpace {
             var back = player.getPersistentData().getCompound(PLAYER_TAG);
             if (back.hasUUID("node_id") && node.id.equals(back.getUUID("node_id"))) returnPlayer(player);
         }
+        clearDeletedHostBindings(server, node);
         boolean deleted = data.deleteNode(node.id);
         refreshForcedRooms(server);
         return deleted;
+    }
+
+    /**
+     * Remove stale node UUIDs from the preserved host-side structure before
+     * deleting its SavedData entry. The structure blocks remain, allowing a
+     * new core to be placed into the old port/extension layout. The old host
+     * core is converted to one ordinary dropped core immediately instead of
+     * waiting for a later block-entity tick.
+     */
+    private static void clearDeletedHostBindings(MinecraftServer server, IFMachineData.Node node) {
+        ResourceLocation dimensionId = ResourceLocation.tryParse(node.hostDimension);
+        if (dimensionId == null) return;
+        ServerLevel host = server.getLevel(ResourceKey.create(Registries.DIMENSION, dimensionId));
+        if (host == null) return;
+        Set<Long> members = new HashSet<>(node.structureMembers);
+        members.add(node.hostPos);
+        for (long packed : members) {
+            BlockPos pos = BlockPos.of(packed);
+            if (!host.hasChunkAt(pos)) continue;
+            BlockState state = host.getBlockState(pos);
+            BlockEntity be = host.getBlockEntity(pos);
+            boolean hostCore = packed == node.hostPos
+                    && (state.is(IFBlocks.INTEGRATION_UNIT.get()) || state.is(IFBlocks.SIMPLE_INTEGRATION_UNIT.get()));
+            if (hostCore && be instanceof dev.integratedfactory.blockentity.IFStructureBlockEntity part
+                    && node.id.equals(part.nodeId())) {
+                ItemStack drop = new ItemStack(state.getBlock());
+                host.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                Block.popResource(host, pos, drop);
+            } else if (hostCore && be instanceof dev.integratedfactory.blockentity.IFSimpleUnitBlockEntity simple
+                    && node.id.equals(simple.nodeId())) {
+                ItemStack drop = new ItemStack(state.getBlock());
+                host.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                Block.popResource(host, pos, drop);
+            } else if (be instanceof dev.integratedfactory.blockentity.IFStructureBlockEntity part
+                    && node.id.equals(part.nodeId())) {
+                part.clearNodeBinding();
+            }
+        }
     }
 
     /** Remote Create networks cannot run while the host core is unavailable, so don't tick their rooms either. */
@@ -163,6 +207,11 @@ public final class IFMachineSpace {
         if (!node.roomReady) {
             buildRoom(room, new BlockPos(node.roomX, 64, node.roomZ));
             node.roomReady = true;
+        } else {
+            // Rooms created before 2.4.5 used smooth stone for the floor.
+            // Migrate only those original blocks so player-built replacements
+            // are not overwritten when an existing room is reopened.
+            migrateLegacyFloor(room, node);
         }
         node.lastRoomAccess = room.getGameTime();
         IFMachineData.get(server).changed();
@@ -192,11 +241,21 @@ public final class IFMachineSpace {
     private static void buildRoom(ServerLevel level, BlockPos floor) {
         for (int x = -1; x <= 10; x++) for (int z = -1; z <= 10; z++) {
             boolean edge = x == -1 || x == 10 || z == -1 || z == 10;
-            level.setBlock(new BlockPos(floor.getX() + x, 64, floor.getZ() + z), Blocks.SMOOTH_STONE.defaultBlockState(), 3);
+            // The room floor is intentionally unbreakable.  Cornerstone copies
+            // bedrock's gameplay properties while using a smooth-stone texture.
+            level.setBlock(new BlockPos(floor.getX() + x, 64, floor.getZ() + z), IFBlocks.CORNERSTONE.get().defaultBlockState(), 3);
             for (int y = 65; y <= 74; y++) {
                 BlockPos p = new BlockPos(floor.getX() + x, y, floor.getZ() + z);
                 level.setBlock(p, edge ? Blocks.BARRIER.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
             }
+        }
+    }
+
+    private static void migrateLegacyFloor(ServerLevel level, IFMachineData.Node node) {
+        for (int x = -1; x <= 10; x++) for (int z = -1; z <= 10; z++) {
+            BlockPos pos = new BlockPos(node.roomX + x, 64, node.roomZ + z);
+            if (level.getBlockState(pos).is(Blocks.SMOOTH_STONE))
+                level.setBlock(pos, IFBlocks.CORNERSTONE.get().defaultBlockState(), 3);
         }
     }
 
@@ -217,6 +276,32 @@ public final class IFMachineSpace {
 
     public static boolean isInsideRoom(BlockPos pos, IFMachineData.Node node) {
         return pos.getX() >= node.roomX && pos.getX() < node.roomX + 10 && pos.getZ() >= node.roomZ && pos.getZ() < node.roomZ + 10 && pos.getY() >= 65 && pos.getY() <= 74;
+    }
+
+    /**
+     * Returns the logical machine node whose 10x10x10 build volume contains
+     * {@code pos}.  This is deliberately based on the authoritative SavedData
+     * registry instead of the blocks currently visible in the room: a room can
+     * be partially loaded while a schematicannon is still holding flying
+     * blocks, and deleted/retired rooms must not become writable again.
+     */
+    public static IFMachineData.Node nodeAtRoom(Level level, BlockPos pos) {
+        if (level == null || !isFactoryDimension(level) || level.getServer() == null) return null;
+        IFMachineData data = IFMachineData.get(level.getServer());
+        // Do not rely solely on the cached chunk index here.  A schematicannon
+        // can be placed on the top/edge of a room, and older saved rooms may
+        // have coordinates from before the one-chunk alignment migration. The
+        // authoritative node bounds are cheap to check for this infrequent
+        // boundary query and cannot become stale when SavedData is reloaded.
+        for (IFMachineData.Node node : data.nodes().values()) {
+            if (isInsideRoom(pos, node)) return node;
+        }
+        return null;
+    }
+
+    /** Returns whether a position belongs to any currently registered room. */
+    public static boolean isInsideAnyRoom(Level level, BlockPos pos) {
+        return nodeAtRoom(level, pos) != null;
     }
 
     public static boolean isFactoryDimension(Level level) { return level.dimension().equals(DIMENSION); }

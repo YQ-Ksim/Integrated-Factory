@@ -8,7 +8,9 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -20,11 +22,30 @@ import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
 import dev.integratedfactory.menu.IFNodeMenu;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 
 public class IFEntityBlock extends BaseEntityBlock implements IWrenchable {
     public IFEntityBlock(Properties properties) { super(properties); }
     @Override protected MapCodec<? extends BaseEntityBlock> codec() { return simpleCodec(IFEntityBlock::new); }
     @Override public RenderShape getRenderShape(BlockState state) { return RenderShape.MODEL; }
+    @Override public BlockState getStateForPlacement(BlockPlaceContext context) {
+        BlockState state = super.getStateForPlacement(context);
+        boolean connector = state != null && (state.is(dev.integratedfactory.registry.IFBlocks.EXTENSION_INTERFACE.get())
+                || state.is(dev.integratedfactory.registry.IFBlocks.INPUT_PORT.get())
+                || state.is(dev.integratedfactory.registry.IFBlocks.OUTPUT_PORT.get()));
+        if (connector
+                && dev.integratedfactory.blockentity.IFStructureBlockEntity.wouldConnectMultipleStructures(context.getLevel(), context.getClickedPos())) {
+            if (!context.getLevel().isClientSide && context.getPlayer() instanceof ServerPlayer player) {
+                player.displayClientMessage(Component.literal("端口或拓展接口不能连接两个已有的机器结构。"), true);
+            }
+            return null;
+        }
+        return state;
+    }
+    @Override public boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
+        return super.canSurvive(state, level, pos);
+    }
     @Nullable @Override public BlockEntity newBlockEntity(BlockPos pos, BlockState state) { return new IFStructureBlockEntity(pos, state); }
     @SuppressWarnings("unchecked")
     @Nullable @Override public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
@@ -49,7 +70,10 @@ public class IFEntityBlock extends BaseEntityBlock implements IWrenchable {
         if (state.is(dev.integratedfactory.registry.IFBlocks.INTEGRATION_UNIT.get())) {
             IFStructureBlockEntity be = (IFStructureBlockEntity) level.getBlockEntity(pos);
             if (be != null && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-                if (serverPlayer.isShiftKeyDown() && be.node() != null) IFNodeMenu.showStructureStats(serverPlayer, be.node());
+                if (serverPlayer.isShiftKeyDown() && be.node() != null) {
+                    IFNodeMenu.showStructureStats(serverPlayer, be.node());
+                    dev.integratedfactory.event.IFEvents.showNodeWorldRow(serverPlayer, be.node());
+                }
                 else if (!serverPlayer.isShiftKeyDown()) be.enterRoom(serverPlayer);
             }
             return InteractionResult.CONSUME;

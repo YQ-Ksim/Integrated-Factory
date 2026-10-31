@@ -10,7 +10,10 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.UUID;
 
@@ -18,6 +21,7 @@ public class IFSimpleUnitBlockEntity extends KineticBlockEntity {
     private UUID nodeId;
     private UUID initialOwner;
     private UUID rebindToken;
+    private transient boolean playerPlacementAuthorized;
     private KineticNetwork lastStressNetwork;
     private float lastSubmittedStress = Float.NaN;
     public IFSimpleUnitBlockEntity(BlockPos pos, BlockState state) { super(IFBlockEntities.SIMPLE_UNIT.get(), pos, state); }
@@ -36,6 +40,7 @@ public class IFSimpleUnitBlockEntity extends KineticBlockEntity {
     }
     public static void tickStress(net.minecraft.world.level.Level level, BlockPos pos, BlockState state, IFSimpleUnitBlockEntity be) {
         if (level.isClientSide) return;
+        if (be.rejectUncanonicalCopy()) return;
         be.ensureNode();
         be.updateStressIfChanged();
     }
@@ -70,6 +75,12 @@ public class IFSimpleUnitBlockEntity extends KineticBlockEntity {
     }
     @Override public void onLoad() {
         super.onLoad();
+        if (level != null && !level.isClientSide && nodeId != null
+                && IFMachineData.get(level.getServer()).wasDeleted(nodeId)) {
+            nodeId = null;
+            rebindToken = null;
+            setChanged();
+        }
         if (level != null && !level.isClientSide && !IFMachineSpace.isFactoryDimension(level) && nodeId != null) {
             IFMachineData.Node hostNode = node();
             if (hostNode != null && hostNode.beginRuntimeRecovery())
@@ -78,6 +89,10 @@ public class IFSimpleUnitBlockEntity extends KineticBlockEntity {
     }
     private void ensureNode() {
         if (level == null || level.isClientSide) return;
+        // Only an actual player placement (or explicit empty-hand migration)
+        // may activate an unbound simple unit.  This blocks Create schematic
+        // printing, which places blocks without EntityPlaceEvent.
+        if (nodeId == null && !playerPlacementAuthorized) return;
         IFMachineData data = IFMachineData.get(level.getServer());
         if (data.wasDeleted(nodeId)) return;
         IFMachineData.Node node = data.get(nodeId);
@@ -119,6 +134,72 @@ public class IFSimpleUnitBlockEntity extends KineticBlockEntity {
             setChanged();
         }
     }
+
+    private boolean rejectUncanonicalCopy() {
+        if (level == null || level.isClientSide) return false;
+        IFMachineData data = IFMachineData.get(level.getServer());
+        if (nodeId != null && data.wasDeleted(nodeId)) {
+            if (playerPlacementAuthorized) {
+                nodeId = null;
+                rebindToken = null;
+                setChanged();
+                return false;
+            }
+            ItemStack drop = new ItemStack(getBlockState().getBlock());
+            level.setBlock(worldPosition, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            Block.popResource(level, worldPosition, drop);
+            return true;
+        }
+        IFMachineData.Node saved = data.get(nodeId);
+        if (nodeId == null && !playerPlacementAuthorized) {
+            ItemStack drop = dev.integratedfactory.block.IFBoundBlockDrops.createCoreDrop(getBlockState(), this);
+            level.setBlock(worldPosition, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            Block.popResource(level, worldPosition, drop);
+            return true;
+        }
+        if (nodeId != null && saved == null) {
+            ItemStack drop = dev.integratedfactory.block.IFBoundBlockDrops.createCoreDrop(getBlockState(), this);
+            level.setBlock(worldPosition, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            Block.popResource(level, worldPosition, drop);
+            return true;
+        }
+        if (nodeId != null && saved != null
+                && saved.hostDimension.equals(level.dimension().location().toString())
+                && saved.hostPos == worldPosition.asLong()
+                && "core_removed".equals(saved.status)
+                && !playerPlacementAuthorized) {
+            ItemStack drop = dev.integratedfactory.block.IFBoundBlockDrops.createCoreDrop(getBlockState(), this);
+            level.setBlock(worldPosition, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            Block.popResource(level, worldPosition, drop);
+            return true;
+        }
+        if (nodeId == null || playerPlacementAuthorized) {
+            // A player may place a bound item only through the explicit
+            // rebind flow.  A normal bound item with no pending token must
+            // not create a second host for an existing machine world.
+            if (nodeId != null && saved != null
+                    && (!saved.hostDimension.equals(level.dimension().location().toString())
+                    || saved.hostPos != worldPosition.asLong())) {
+                if (saved.pendingCoreToken == null && !"core_removed".equals(saved.status)
+                        || saved.pendingCoreToken != null
+                        && IFStructureBlockEntity.hasBoundHostCore(level, saved, worldPosition)) {
+                    ItemStack drop = dev.integratedfactory.block.IFBoundBlockDrops.createCoreDrop(getBlockState(), this);
+                    level.setBlock(worldPosition, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                    Block.popResource(level, worldPosition, drop);
+                    return true;
+                }
+            }
+            return false;
+        }
+        boolean canonical = saved != null
+                && saved.hostDimension.equals(level.dimension().location().toString())
+                && saved.hostPos == worldPosition.asLong();
+        if (saved == null || canonical) return false;
+        ItemStack drop = dev.integratedfactory.block.IFBoundBlockDrops.createCoreDrop(getBlockState(), this);
+        level.setBlock(worldPosition, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        Block.popResource(level, worldPosition, drop);
+        return true;
+    }
     @Override protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(tag, registries, clientPacket);
         if (nodeId != null) tag.putUUID("node_id", nodeId);
@@ -127,6 +208,8 @@ public class IFSimpleUnitBlockEntity extends KineticBlockEntity {
     }
     @Override protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) { super.loadAdditional(tag, registries); if (tag.hasUUID("node_id")) nodeId = tag.getUUID("node_id"); if (tag.hasUUID("initial_owner")) initialOwner = tag.getUUID("initial_owner"); if (tag.hasUUID("rebind_token")) rebindToken = tag.getUUID("rebind_token"); }
     public void setInitialOwner(UUID owner) { if (nodeId == null && initialOwner == null) { initialOwner = owner; setChanged(); } }
+    public void markPlayerPlacement() { playerPlacementAuthorized = true; setChanged(); }
+    public void clearNodeBinding() { nodeId = null; rebindToken = null; initialOwner = null; playerPlacementAuthorized = false; setChanged(); }
     public void setRebindIdentity(UUID nodeId, UUID token) { this.nodeId = nodeId; this.rebindToken = token; setChanged(); }
     public void saveRebindToken(CompoundTag tag) { if (rebindToken != null) tag.putUUID("rebind_token", rebindToken); }
 }

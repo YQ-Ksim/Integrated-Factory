@@ -10,6 +10,7 @@ import net.neoforged.fml.ModContainer;
 import dev.integratedfactory.config.IFServerConfig;
 import dev.integratedfactory.space.IFMachineSpace;
 import net.neoforged.neoforge.common.NeoForge;
+import com.simibubi.create.api.contraption.BlockMovementChecks;
 
 @Mod(IntegratedFactory.MOD_ID)
 public final class IntegratedFactory {
@@ -17,6 +18,12 @@ public final class IntegratedFactory {
 
     public IntegratedFactory(IEventBus modBus, ModContainer modContainer) {
         modContainer.registerConfig(ModConfig.Type.SERVER, IFServerConfig.spec(), "integrated_factory-server.toml");
+        // Integrated cores are fixed node anchors, never movable contraption
+        // blocks. This covers Create mechanical pistons, bearings, gantries,
+        // chassis and other contraption assembly paths.
+        BlockMovementChecks.registerMovementAllowedCheck((state, level, pos) ->
+                state.is(IFBlocks.INTEGRATION_UNIT.get()) || state.is(IFBlocks.SIMPLE_INTEGRATION_UNIT.get())
+                        ? BlockMovementChecks.CheckResult.FAIL : BlockMovementChecks.CheckResult.PASS);
         modBus.addListener(IFMachineSpace::registerTicketController);
         NeoForge.EVENT_BUS.addListener(IFMachineSpace::onServerStarted);
         NeoForge.EVENT_BUS.addListener(IFMachineSpace::onServerTick);

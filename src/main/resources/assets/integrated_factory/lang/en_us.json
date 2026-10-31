@@ -5,5 +5,6 @@
   "block.integrated_factory.output_port": "Factory Output Port",
   "block.integrated_factory.simple_integration_unit": "Simple Integration Unit",
   "block.integrated_factory.stress_port": "Stress Port",
+  "block.integrated_factory.cornerstone": "Cornerstone",
   "itemGroup.integrated_factory": "Integrated Factory"
 }

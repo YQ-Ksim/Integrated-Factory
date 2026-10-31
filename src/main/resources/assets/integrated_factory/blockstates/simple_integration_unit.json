@@ -8,7 +8,7 @@
     "facing=south": {
       "model": "integrated_factory:block/simple_integration_unit_front_east",
       "x": 90,
-      "y": 270
+      "y": 90
     },
     "facing=east": {
       "model": "integrated_factory:block/simple_integration_unit_front_west",
@@ -18,7 +18,7 @@
     "facing=west": {
       "model": "integrated_factory:block/simple_integration_unit_front_east",
       "x": 90,
-      "y": 0
+      "y": 180
     }
   }
 }
