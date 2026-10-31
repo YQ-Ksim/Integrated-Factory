@@ -119,7 +119,7 @@ Integrated Factory 是一个面向 Create 的 NeoForge 附属模组。它把一�
 
 ## 构建
 
-构建前请先阅读 [`BUILDING.md`](BUILDING.md)。当前开发环境为 Java 21、Gradle 8.14、NeoForge 21.1.x 和 Create 6.0.10。
+当前开发环境为 Java 21、Gradle 8.14、NeoForge 21.1.x 和 Create 6.0.10。
 
 PowerShell 示例：
 
